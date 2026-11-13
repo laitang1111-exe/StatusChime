@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_summary">常驻监听插拔电，用来放提示音</string>
+    <string name="a11y_desc">开启后，插上或拔掉充电线时播放提示音。本服务不读取屏幕内容。</string>
+</resources>

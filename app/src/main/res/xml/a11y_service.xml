@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  无障碍服务配置：只用来常驻，不用来读界面。
+
+  canRetrieveWindowContent=false  → 不读任何界面内容（隐私最小化）
+  accessibilityEventTypes 不填     → 不订阅任何事件
+  accessibilityFeedbackType=generic → 系统要求的必填项
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/a11y_desc"
+    android:notificationTimeout="0"
+    android:summary="@string/a11y_summary" />
