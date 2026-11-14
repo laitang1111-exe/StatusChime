@@ -31,3 +31,4 @@ build_out*.txt
 Thumbs.db
 desktop.ini
 .DS_Store
+*.idsig

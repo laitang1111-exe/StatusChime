@@ -299,15 +299,19 @@ object SoundHub {
         }
     }
 
-    /** 建池并预加载两个短音（只做一次） */
+    /**
+     * 建池并预加载两个短音。
+     *
+     * 注意：SoundPool 的 AudioAttributes 一旦建好就改不了，
+     * 所以这里必须按【当前通道】建池；通道一换就把池丢掉重建，
+     * 否则选「铃声」通道却会从通知通道出声。
+     */
     @Synchronized
     private fun ensurePool(ctx: Context) {
         if (pool != null) return
-        val attrs = android.media.AudioAttributes.Builder()
-            .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
-            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
+        val attrs = attrs()
         val sp = SoundPool.Builder().setMaxStreams(2).setAudioAttributes(attrs).build()
+        Log.i(TAG, "SoundPool 建池 usage=${attrs.usage} channel=${nameOf(channel)}")
         sp.setOnLoadCompleteListener { _, sampleId, status ->
             poolLoaded[sampleId] = status == 0
             Log.i(TAG, "SoundPool loaded id=$sampleId ok=${status == 0}")
@@ -327,8 +331,29 @@ object SoundHub {
     }
 
     fun setChannel(ctx: Context, ch: Int) {
+        val changed = ch != channel
         channel = ch
         prefs(ctx).edit().putInt("channel", ch).apply()
+        // 通道变了必须把 SoundPool 丢掉，否则还挂在旧通道上
+        if (changed) releasePool()
+    }
+
+    /** 释放预加载池（通道切换时调用） */
+    @Synchronized
+    private fun releasePool() {
+        runCatching { pool?.release() }
+        pool = null
+        poolLoaded.clear()
+        spScreenOff = 0
+        spUnlock = 0
+        Log.i(TAG, "SoundPool 已释放，等待按新通道重建")
+    }
+
+    /** 兜底用的系统提示音：跟着当前通道走，而不是永远用通知音 */
+    private fun defaultToneUri(): Uri = when (channel) {
+        CHANNEL_RING -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        CHANNEL_ALARM -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
     }
 
     // ───────── 每个事件的铃声 ─────────
@@ -438,7 +463,7 @@ object SoundHub {
     private fun playRawAsset(ctx: Context, name: String, a: AudioAttributes, e: ChargeEvent?) {
         val resId = ctx.resources.getIdentifier(name, "raw", ctx.packageName)
         if (resId == 0) {
-            playUri(ctx, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), a, e)
+            playUri(ctx, defaultToneUri(), a, e)
             return
         }
         runCatching {
@@ -449,7 +474,7 @@ object SoundHub {
             }
         }.onFailure {
             Log.w(TAG, "raw asset $name failed", it)
-            playUri(ctx, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), a, e)
+            playUri(ctx, defaultToneUri(), a, e)
         }
     }
 
@@ -460,6 +485,8 @@ object SoundHub {
             Log.w(TAG, "MediaPlayer failed, fallback to Ringtone", it)
             runCatching {
                 val tone: Ringtone = RingtoneManager.getRingtone(ctx, uri) ?: return
+                // Ringtone 默认按自己的类型选流，这里强制用当前通道的属性
+                runCatching { tone.audioAttributes = a }
                 if (tone.isPlaying) tone.stop()
                 tone.play()
             }
